@@ -7,7 +7,7 @@ const authorizeRole = require("../middleware/roleMiddleWare");
 
 router.post("/scan", requireAuth, authorizeRole("security", "admin"), scanTheQr);
 
-router.get("/logs", requireAuth, authorizeRole("admin"), getLogs);
+router.get("/logs", requireAuth, authorizeRole("admin", "security"), getLogs);
 
 router.get("/stats", requireAuth, authorizeRole("admin"), getStats);
 

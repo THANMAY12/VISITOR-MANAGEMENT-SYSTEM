@@ -1,8 +1,9 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import API from "../api";
 
 function Sidebar() {
   const navigate = useNavigate();
+  const location = useLocation();
   const userData = localStorage.getItem("user");
 
   if (!userData) return null;
@@ -19,91 +20,88 @@ function Sidebar() {
     navigate("/");
   };
 
+  const NavLink = ({ to, children }) => {
+    const isActive = location.pathname === to;
+    return (
+      <Link 
+        to={to} 
+        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+          isActive 
+            ? "bg-indigo-600 text-white shadow-md shadow-indigo-200" 
+            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+        }`}
+      >
+        {children}
+      </Link>
+    );
+  };
+
   return (
-    <div className="w-full bg-gray-900 text-white px-6 py-3 flex justify-between items-center shadow">
+    <nav className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-3 flex justify-between items-center">
       
-      {/* Left side */}
-      <div className="flex items-center gap-6">
-        <h2 className="text-xl font-bold">VMS</h2>
+      <div className="flex items-center gap-8">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-indigo-200 shadow-lg">
+            <span className="text-white font-bold text-sm">V</span>
+          </div>
+          <h2 className="text-xl font-bold tracking-tight text-slate-900">VMS</h2>
+        </div>
 
-        {/* Visitor sees their own dashboard */}
-        {user.role === "visitor" && (
-          <>
-            <Link to="/app/visitor-dashboard" className="hover:text-blue-400">
-              My Dashboard
-            </Link>
-            <Link to="/app/appointments" className="hover:text-blue-400">
-              My Appointments
-            </Link>
-          </>
-        )}
+        <div className="hidden md:flex items-center gap-1">
+          {user.role === "visitor" && (
+            <>
+              <NavLink to="/app/visitor-dashboard">My Dashboard</NavLink>
+              <NavLink to="/app/appointments">My Appointments</NavLink>
+            </>
+          )}
 
-        {/* Non-visitor, non-security users see the main dashboard */}
-        {user.role !== "visitor" && (
-          <Link to="/app/dashboard" className="hover:text-blue-400">
-            Dashboard
-          </Link>
-        )}
+          {user.role !== "visitor" && (
+            <NavLink to="/app/dashboard">Dashboard</NavLink>
+          )}
 
-        {/* Employee and Admin manage visitors and appointments */}
-        {(user.role === "employee" || user.role === "admin") && (
-          <>
-            <Link to="/app/visitor-register" className="hover:text-blue-400">
-              Register Visitor
-            </Link>
-            <Link to="/app/manage-visitors" className="hover:text-blue-400">
-              Manage Visitors
-            </Link>
-            <Link to="/app/appointments" className="hover:text-blue-400">
-              Appointments
-            </Link>
-          </>
-        )}
+          {(user.role === "employee" || user.role === "admin") && (
+            <>
+              <NavLink to="/app/visitor-register">Register</NavLink>
+              <NavLink to="/app/manage-visitors">Manage</NavLink>
+              <NavLink to="/app/appointments">Appointments</NavLink>
+            </>
+          )}
 
-        {/* Security sees appointments (to issue passes) and scan */}
-        {user.role === "security" && (
-          <>
-            <Link to="/app/appointments" className="hover:text-blue-400">
-              Appointments
-            </Link>
-            <Link to="/app/scan" className="hover:text-blue-400">
-              Scan
-            </Link>
-            <Link to="/app/check-pass" className="hover:text-blue-400">Lookup Pass</Link>
-          </>
-        )}
+          {user.role === "security" && (
+            <>
+              <NavLink to="/app/appointments">Appointments</NavLink>
+              <NavLink to="/app/scan">Scan</NavLink>
+              <NavLink to="/app/check-pass">Lookup</NavLink>
+            </>
+          )}
 
-        {/* Admin-only links */}
-        {user.role === "admin" && (
-          <>
-            <Link to="/app/scan" className="hover:text-blue-400">
-              Scan
-            </Link>
-            <Link to="/app/logs" className="hover:text-blue-400">
-              Logs
-            </Link>
-            <Link to="/app/create-user" className="hover:text-blue-400">
-              Create User
-            </Link>
-            <Link to="/app/passes" className="hover:text-blue-400">All Passes</Link>
-          </>
-        )}
+          {user.role === "admin" && (
+            <>
+              <NavLink to="/app/scan">Scan</NavLink>
+              <NavLink to="/app/logs">Logs</NavLink>
+              <NavLink to="/app/create-user">Users</NavLink>
+              <NavLink to="/app/passes">Passes</NavLink>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Right side */}
       <div className="flex items-center gap-4">
-        <span className="text-sm text-gray-400 uppercase">
-          {user.role}
-        </span>
+        <div className="hidden sm:flex flex-col items-end mr-2">
+          <span className="text-sm font-semibold text-slate-900 leading-none">{user.name}</span>
+          <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mt-1">
+            {user.role}
+          </span>
+        </div>
 
         <button
           onClick={logout}
-          className="bg-red-500 hover:bg-red-600 px-4 py-1 rounded"
+          className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm"
         >
           Logout
         </button>
       </div>
-    </div>
+    </nav>
   );
 }
 

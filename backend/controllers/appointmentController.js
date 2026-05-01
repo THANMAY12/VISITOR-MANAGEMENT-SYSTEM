@@ -5,7 +5,7 @@ const PDFDocument = require("pdfkit")
 const cloudinary = require("../config/cloudinary")
 const sendEmail = require("../utils/sendEmail")
 const Visitor = require('../models/visitor')
-
+const axios = require("axios")
 exports.createAppointment = async (req, res) => {
   try {
     const { visitorId, date, purpose } = req.body
@@ -115,29 +115,73 @@ exports.updateStatus = async (req, res) => {
 }
 
 
+
+
 // generate pdf buffer in memory
-const generatePDF = (visitor, appt, from, to, qrImg) => {
-  return new Promise((resolve, reject) => {
+const generatePDF = async (visitor, appt, from, to, qrImg) => {
+  return new Promise(async (resolve, reject) => {
     try {
-      const doc = new PDFDocument()
+      const doc = new PDFDocument({ size: "A4", margin: 50 })
       let chunks = []
       
       doc.on("data", (c) => chunks.push(c))
-      
       doc.on("end", () => {
         resolve(Buffer.concat(chunks))
       })
 
-      doc.fontSize(16).text("Visitor Pass", { align: "center" })
-      doc.moveDown()
-      doc.text("Visitor Name: " + visitor.name)
-      doc.text("Visitor Email: " + visitor.email)
-      doc.text("Meeting Purpose: " + appt.purpose)
-      doc.text("Valid From: " + from.toLocaleString())
-      doc.text("Valid To: " + to.toLocaleString())
-      doc.moveDown()
-      
-      doc.image(qrImg, { width: 150 })
+      // 1. Header Title
+      doc.fontSize(22).text("Visitor Pass Management System", { align: "center" })
+      doc.moveDown(0.5)
+
+      // 2. Horizontal Line
+      doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#000000").lineWidth(1).stroke()
+      doc.moveDown(2)
+
+      const startY = doc.y
+
+      // 3. Visitor Photo (Left)
+      if (visitor.photo) {
+        try {
+          const response = await axios.get(visitor.photo, { responseType: 'arraybuffer' })
+          const photoBuffer = Buffer.from(response.data, 'binary')
+          doc.image(photoBuffer, 50, startY, { width: 150, height: 150 })
+        } catch (err) {
+          console.error("Could not load visitor photo for PDF", err)
+          doc.rect(50, startY, 150, 150).stroke()
+          doc.fontSize(10).text("Photo Not Available", 50, startY + 70, { width: 150, align: "center" })
+        }
+      } else {
+        doc.rect(50, startY, 150, 150).stroke()
+        doc.fontSize(10).text("No Photo Provided", 50, startY + 70, { width: 150, align: "center" })
+      }
+
+      // 4. QR Code (Right)
+      doc.image(qrImg, 395, startY, { width: 150 })
+
+      // 5. Visitor Details
+      doc.moveDown(8) // Move below images
+      doc.fontSize(14).fillColor("#000000")
+
+      const detailX = 50
+      const labelWidth = 100
+
+      const addDetail = (label, value) => {
+        doc.font("Helvetica-Bold").text(`${label} : `, detailX, doc.y, { continued: true })
+        doc.font("Helvetica").text(value)
+        doc.moveDown(0.5)
+      }
+
+      addDetail("Name", visitor.name)
+      addDetail("Email", visitor.email)
+      addDetail("Phone", visitor.phone || "N/A")
+      addDetail("Purpose", appt.purpose)
+      addDetail("Valid From", from.toLocaleString())
+      addDetail("Valid To", to.toLocaleString())
+
+      // 6. Footer Message
+      doc.moveDown(3)
+      doc.fontSize(10).font("Helvetica").text("Please carry this pass during your visit. Thank You", { align: "center" })
+
       doc.end()
     } catch (err) {
       reject(err)
@@ -158,11 +202,20 @@ const uploadToCloudinary = async (pdfBuf) => {
 }
 
 // send email and sms
-const sendNotifications = async (visitor, link) => {
-  const msg = "Hello " + visitor.name + ", your pass is ready. Download it here: " + link
+const sendNotifications = async (visitor, link, validFrom, validTo) => {
+  const msg = `Hello ${visitor.name},
+Your Visitor pass has been approved.
+
+Click here to view your pass:
+${link}
+
+Valid From: ${validFrom.toString()}
+Valid To: ${validTo.toString()}
+
+Thank you.`
   
   try {
-    await sendEmail(visitor.email, "Your Visitor Pass", msg)
+    await sendEmail(visitor.email, "Your Visitor Pass - Approved", msg)
   } catch (err) {
     console.log("email fail", err)
   }
@@ -170,7 +223,9 @@ const sendNotifications = async (visitor, link) => {
   const sendSMS = require("../utils/sendSMS")
   try {
     if (visitor.phone && visitor.phone !== "N/A") {
-      await sendSMS(visitor.phone, msg)
+      // For SMS, we'll use a slightly shorter version but with the same link
+      const smsMsg = `Hello ${visitor.name}, your pass is approved. View it here: ${link}`
+      await sendSMS(visitor.phone, smsMsg)
     }
   } catch (err) {
     console.log("sms fail", err)
@@ -218,7 +273,7 @@ exports.issuePass = async (req, res) => {
     appointment.passId = newPass._id
     await appointment.save()
 
-    await sendNotifications(visitor, cloudLink)
+    await sendNotifications(visitor, cloudLink, startTime, endTime)
 
     res.json({ message: "pass issued", pass: newPass })
 
