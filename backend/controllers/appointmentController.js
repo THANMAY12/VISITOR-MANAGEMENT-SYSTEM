@@ -142,7 +142,7 @@ const generatePDF = async (visitor, appt, from, to, qrImg) => {
       // 3. Visitor Photo (Left)
       if (visitor.photo) {
         try {
-          const response = await axios.get(visitor.photo, { responseType: 'arraybuffer' })
+          const response = await axios.get(visitor.photo, { responseType: 'arraybuffer', timeout: 3000 })
           const photoBuffer = Buffer.from(response.data, 'binary')
           doc.image(photoBuffer, 50, startY, { width: 150, height: 150 })
         } catch (err) {
@@ -159,7 +159,7 @@ const generatePDF = async (visitor, appt, from, to, qrImg) => {
       doc.image(qrImg, 395, startY, { width: 150 })
 
       // 5. Visitor Details
-      doc.moveDown(8) // Move below images
+      doc.moveDown(8) 
       doc.fontSize(14).fillColor("#000000")
 
       const detailX = 50
@@ -204,18 +204,18 @@ const uploadToCloudinary = async (pdfBuf) => {
 // send email and sms
 const sendNotifications = async (visitor, link, validFrom, validTo) => {
   const msg = `Hello ${visitor.name},
-Your Visitor pass has been approved.
+Your Visitor pass has been approved and issued.
 
 Click here to view your pass:
 ${link}
 
-Valid From: ${validFrom.toString()}
-Valid To: ${validTo.toString()}
+Valid From: ${validFrom}
+Valid To: ${validTo}
 
 Thank you.`
   
   try {
-    await sendEmail(visitor.email, "Your Visitor Pass - Approved", msg)
+    await sendEmail(visitor.email, "Your Visitor Pass - Issued", msg)
   } catch (err) {
     console.log("email fail", err)
   }
@@ -223,8 +223,8 @@ Thank you.`
   const sendSMS = require("../utils/sendSMS")
   try {
     if (visitor.phone && visitor.phone !== "N/A") {
-      // For SMS, we'll use a slightly shorter version but with the same link
-      const smsMsg = `Hello ${visitor.name}, your pass is approved. View it here: ${link}`
+      
+      const smsMsg = `Hello ${visitor.name}, your pass is approved and issued. View it here: ${link}`
       await sendSMS(visitor.phone, smsMsg)
     }
   } catch (err) {
@@ -251,8 +251,9 @@ exports.issuePass = async (req, res) => {
 
     const visitor = appointment.visitorId
     const startTime = new Date()
-    const endTime = new Date(Date.now() + 8 * 60 * 60 * 1000) 
+    const endTime = new Date(Date.now() + 8 * 60 * 60 * 1000)
 
+    // 1. Save the pass record immediately — this is all we need to respond
     const newPass = await Pass.create({
       visitorId: visitor._id,
       appointmentId: appointment._id,
@@ -260,22 +261,26 @@ exports.issuePass = async (req, res) => {
       validTo: endTime
     })
 
-    const qrStr = JSON.stringify({ passId: newPass._id })
-    const qrImage = await QRCode.toDataURL(qrStr)
-
-    const pdfBuffer = await generatePDF(visitor, appointment, startTime, endTime, qrImage)
-    const cloudLink = await uploadToCloudinary(pdfBuffer)
-
-    newPass.pdfUrl = cloudLink
-    await newPass.save()
-
-    // link pass to appointment so dashboard can show download button
     appointment.passId = newPass._id
     await appointment.save()
 
-    await sendNotifications(visitor, cloudLink, startTime, endTime)
-
+    // 2. Respond right away — the pass is valid from this point
     res.json({ message: "pass issued", pass: newPass })
+
+    // 3. Do the slow work in the background after responding
+    ;(async () => {
+      try {
+        const qrStr = JSON.stringify({ passId: newPass._id })
+        const qrImage = await QRCode.toDataURL(qrStr)
+        const pdfBuffer = await generatePDF(visitor, appointment, startTime, endTime, qrImage)
+        const cloudLink = await uploadToCloudinary(pdfBuffer)
+        newPass.pdfUrl = cloudLink
+        await newPass.save()
+        sendNotifications(visitor, cloudLink, startTime, endTime)
+      } catch (bgErr) {
+        console.log("background pdf/notify error", bgErr)
+      }
+    })()
 
   } catch (err) {
     console.log("issue error", err)

@@ -46,7 +46,7 @@ function Appointments() {
       setError("");
       setMessage("");
       await API.post("/appointments/" + id + "/issue-pass");
-      setMessage("Pass issued and sent to visitor");
+      setMessage("Pass issued! PDF will be ready shortly and emailed to the visitor.");
       fetchAppointments();
     } catch (e) {
       console.error(e);
@@ -153,9 +153,17 @@ function Appointments() {
                           <button
                             onClick={() => issuePass(a._id)}
                             disabled={processingId === a._id}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-sm disabled:opacity-50 transition-all"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-sm disabled:opacity-50 transition-all flex items-center gap-1.5"
                           >
-                            {processingId === a._id ? "..." : "Issue Pass"}
+                            {processingId === a._id ? (
+                              <>
+                                <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                                </svg>
+                                Issuing...
+                              </>
+                            ) : "Issue Pass"}
                           </button>
                         )}
                       </div>
