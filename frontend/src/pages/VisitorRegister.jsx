@@ -136,6 +136,7 @@ function VisitorRegister() {
         <label className="block text-sm mb-1">Upload Photo</label>
         <input
           type="file"
+          accept="image/*"
           className="w-full"
           onChange={(e) => setPhoto(e.target.files[0])}
         />

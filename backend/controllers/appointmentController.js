@@ -18,7 +18,7 @@ exports.createAppointment = async (req, res) => {
       status: "approved"
     })
 
-    res.json(appt)
+    res.status(201).json(appt)
 
   } catch (e) {
     console.log(e)
@@ -58,7 +58,7 @@ exports.createMyAppointment = async (req, res) => {
       status: "pending"
     })
 
-    res.json({ message: "request submitted", appointment: appt })
+    res.status(201).json({ message: "request submitted", appointment: appt })
 
   } catch (e) {
     console.log(e)
@@ -215,20 +215,25 @@ Valid To: ${validTo}
 Thank you.`
   
   try {
+    console.log(`Attempting to send email to: ${visitor.email}`);
     await sendEmail(visitor.email, "Your Visitor Pass - Issued", msg)
+    console.log("Email sent successfully.");
   } catch (err) {
-    console.log("email fail", err)
+    console.error("Email notification failed:", err);
   }
 
   const sendSMS = require("../utils/sendSMS")
   try {
     if (visitor.phone && visitor.phone !== "N/A") {
-      
+      console.log(`Attempting to send SMS to: ${visitor.phone}`);
       const smsMsg = `Hello ${visitor.name}, your pass is approved and issued. View it here: ${link}`
       await sendSMS(visitor.phone, smsMsg)
+      console.log("SMS sent successfully.");
+    } else {
+      console.log("Skipping SMS notification: No valid phone number.");
     }
   } catch (err) {
-    console.log("sms fail", err)
+    console.error("SMS notification failed:", err);
   }
 }
 
@@ -253,7 +258,8 @@ exports.issuePass = async (req, res) => {
     const startTime = new Date()
     const endTime = new Date(Date.now() + 8 * 60 * 60 * 1000)
 
-    // 1. Save the pass record immediately — this is all we need to respond
+    // 1. Save the pass record immediately
+    console.log("Creating pass record for appointment:", appointment._id);
     const newPass = await Pass.create({
       visitorId: visitor._id,
       appointmentId: appointment._id,
@@ -263,27 +269,42 @@ exports.issuePass = async (req, res) => {
 
     appointment.passId = newPass._id
     await appointment.save()
+    console.log("Pass record created:", newPass._id);
 
     // 2. Respond right away — the pass is valid from this point
-    res.json({ message: "pass issued", pass: newPass })
-
+    res.status(201).json({ message: "pass issued", pass: newPass });
+    console.log("Response sent to client, starting background tasks...");
+    
     // 3. Do the slow work in the background after responding
-    ;(async () => {
+    (async () => {
       try {
+        console.log("Background: Generating QR Code...");
         const qrStr = JSON.stringify({ passId: newPass._id })
         const qrImage = await QRCode.toDataURL(qrStr)
+        console.log("Background: QR Code generated.");
+
+        console.log("Background: Generating PDF...");
         const pdfBuffer = await generatePDF(visitor, appointment, startTime, endTime, qrImage)
+        console.log("Background: PDF generated (size:", pdfBuffer.length, "bytes).");
+
+        console.log("Background: Uploading to Cloudinary...");
         const cloudLink = await uploadToCloudinary(pdfBuffer)
+        console.log("Background: PDF uploaded to Cloudinary:", cloudLink);
+
         newPass.pdfUrl = cloudLink
         await newPass.save()
-        sendNotifications(visitor, cloudLink, startTime, endTime)
+        console.log("Background: Pass record updated with PDF URL.");
+
+        console.log("Background: Sending notifications...");
+        await sendNotifications(visitor, cloudLink, startTime, endTime)
+        console.log("Background: All background tasks completed successfully.");
       } catch (bgErr) {
-        console.log("background pdf/notify error", bgErr)
+        console.error("CRITICAL: Background pdf/notify error:", bgErr);
       }
     })()
 
   } catch (err) {
-    console.log("issue error", err)
+    console.error("IssuePass Error:", err);
     res.status(500).json({ error: "failed to issue" })
   }
 }
