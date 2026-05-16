@@ -1,21 +1,27 @@
 const nodemailer = require("nodemailer");
+const dns = require("dns");
+const { promisify } = require("util");
+const lookup = promisify(dns.lookup);
 const sendEmail = async (to, subject, text) => {
   try {
+    const { address: ipv4Host } = await lookup("smtp.gmail.com", 4);
+    console.log(`Resolved SMTP host to IPv4: ${ipv4Host}`);
+
     const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
+      host: ipv4Host,
       port: 465,
       secure: true,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
-      family: 4,
+      tls: {
+        servername: "smtp.gmail.com",
+        rejectUnauthorized: false,
+      },
       connectionTimeout: 30000,
       greetingTimeout: 30000,
       socketTimeout: 30000,
-      tls: {
-        rejectUnauthorized: false,
-      },
     });
     await transporter.verify();
     console.log("SMTP Server Ready");
